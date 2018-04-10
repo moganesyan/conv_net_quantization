@@ -224,7 +224,7 @@ class lenetModel(object):
                 
         
         
-        return y_pred_cls,optimizer,accuracy
+        return y_pred_cls,optimizer,accuracy,[weights_conv1,weights_conv2,weights_fc1,weights_fc2]
         
         
         
@@ -636,7 +636,7 @@ class cifarnetModel(object):
                 
         
         
-        return y_pred_cls,optimizer,accuracy
+        return y_pred_cls,optimizer,accuracy,[-1]
          
         
         

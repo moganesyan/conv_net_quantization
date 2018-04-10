@@ -185,4 +185,48 @@ def plot_confusion_matrix(data_true,cls_pred,num_classes):
     # in a single Notebook cell.
     plt.show()
 
+def plot_conv_weights(session, config, weights, input_channel=0):
+    bitw=config._bitw
+    BITW=config.BITW
+    w = session.run(weights, feed_dict={bitw:32})
 
+    # Get the lowest and highest values for the weights.
+    # This is used to correct the colour intensity across
+    # the images so they can be compared with each other.
+    w_min = np.min(w)
+    w_max = np.max(w)
+    
+    print("The weights are ")
+    print(w)
+
+    # Number of filters used in the conv. layer.
+    num_filters = w.shape[3]
+    print(num_filters)
+
+    # Number of grids to plot.
+    # Rounded-up, square-root of the number of filters.
+    num_grids = math.ceil(math.sqrt(num_filters))
+    
+    # Create figure with a grid of sub-plots.
+    fig, axes = plt.subplots(int(num_grids), int(num_grids))
+
+    # Plot all the filter-weights.
+    for i, ax in enumerate(axes.flat):
+        # Only plot the valid filter-weights.
+        if i<num_filters:
+            # Get the weights for the i'th filter of the input channel.
+            # See new_conv_layer() for details on the format
+            # of this 4-dim tensor.
+            img = w[:, :, input_channel, i]
+
+            # Plot image.
+            ax.imshow(img, vmin=w_min, vmax=w_max,
+                      interpolation='nearest', cmap='seismic')
+        
+        # Remove ticks from the plot.
+        ax.set_xticks([])
+        ax.set_yticks([])
+    
+    # Ensure the plot is shown correctly with multiple plots
+    # in a single Notebook cell.
+    plt.show()

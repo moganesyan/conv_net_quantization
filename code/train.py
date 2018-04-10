@@ -20,6 +20,7 @@ logging = tf.logging
 
 flags.DEFINE_string('data_path', None, 'data_path')
 flags.DEFINE_string('config', None, 'config')
+flags.DEFINE_string('mode', None, 'mode') 
 
 FLAGS = flags.FLAGS
 
@@ -189,7 +190,7 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
 
             # Calculate the accuracy on the training-set.
             # Message for printing.
-            msg = "Total iteration: {0:>6}, Training Accuracy of last 1000 batch: {1:>6.1%}"
+            msg = "Total iteration: {0:>6}, Training Accuracy of last 100 batch: {1:>6.1%}"
         
             # Print it.
             print(msg.format((i+1)*1, total_trn_error/100))
@@ -405,14 +406,22 @@ def print_test_accuracy(config,session,data,y_pred_cls,show_example_errors=False
 
 
         # Create a feed-dict with these images and labels.
-        feed_dict = {x: images,
-                     y_true: labels,
-                     bitw:32,
-                     bita:32,
-                     bitg:32,
-                     is_train:False
-                     }
-
+        if "normal" in str(FLAGS.mode):
+            feed_dict = {x: images,
+                         y_true: labels,
+                         bitw:config.BITW,
+                         bita:config.BITA,
+                         bitg:config.BITG,
+                         is_train:False
+                         }
+        elif "sweep" in str(FLAGS.mode):
+            feed_dict = {x: images,
+                         y_true: labels,
+                         bitw:32,
+                         bita:32,
+                         bitg:32,
+                         is_train:False
+                         }            
         # Calculate the predicted class using TensorFlow.
         cls_pred[i:j] = session.run(y_pred_cls, feed_dict=feed_dict)
 
@@ -495,7 +504,7 @@ def main(_):
     
     #iters=(config.num_trn/config.train_batch_size)*config.epochs
     
-    y_pred_cls,optimizer,accuracy=model.get_model()
+    y_pred_cls,optimizer,accuracy,weights=model.get_model()
 
     #saver = tf.train.Saver()
     
@@ -504,18 +513,19 @@ def main(_):
     session.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     
-# =============================================================================
-#     optimize(config=model,session=session,data=data_trn,optimizer=optimizer,
-#                  accuracy=accuracy)
-# =============================================================================
-    
-    optimize_sweep(config=model,session=session,data=data_trn,optimizer=optimizer,
-             accuracy=accuracy,saver=saver)
+    if "normal" in str(FLAGS.mode):
+        optimize(config=model,session=session,data=data_trn,optimizer=optimizer,
+                  accuracy=accuracy)
+        
+    elif "sweep" in str(FLAGS.mode):    
+        optimize_sweep(config=model,session=session,data=data_trn,optimizer=optimizer,
+                 accuracy=accuracy,saver=saver)
         
     print_test_accuracy(config=model,session=session,data=data_tst,y_pred_cls=y_pred_cls,
                         show_confusion_matrix=True,show_example_errors=True)
 
-
+    utils.plot_conv_weights(session=session,config=model,weights=weights[1])
+    
 if __name__ == "__main__":
     tf.app.run()
 
