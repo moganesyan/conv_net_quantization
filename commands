@@ -1,0 +1,4 @@
+lol=[tensor.name for tensor in tf.get_default_graph().as_graph_def().node if "conv1" in tensor.name]
+
+
+lol=[tensor.name for tensor in tf.get_default_graph().as_graph_def().node if "fc0" in tensor.name]
