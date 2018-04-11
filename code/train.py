@@ -1,5 +1,6 @@
 import tensorflow as tf
 import numpy as np
+import pandas as pd
 from sklearn.metrics import confusion_matrix
 import time
 from datetime import timedelta
@@ -91,7 +92,9 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
     count=0
     epochs=1
     print("starting epoch {} ...".format(epochs))
-    saver.save(session, "tmp/model.ckpt")
+    saver.save(session, "tmp/model.ckpt")    
+    
+    prec_array=np.empty((num_iterations,config.img_size_flat+1))
 
     for i in range(0, num_iterations):
 
@@ -132,7 +135,7 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         y_true_batch=temp
         
         temp_arr=[]
-        for prec in range(2,33):
+        for prec in range(4,33):
             saver.restore(session, "tmp/model.ckpt")
             #print("Model restored.")
             #print("testing precision: {}".format(prec))
@@ -156,7 +159,7 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         if max(temp_arr)==0:
             chosen_prec=32
         else:
-            chosen_prec=temp_arr.index(max(temp_arr))+2
+            chosen_prec=temp_arr.index(max(temp_arr))+4
             
         saver.restore(session, "tmp/model.ckpt")
         #fw,fa,fg=get_dorefa(chosen_prec,chosen_prec,chosen_prec)
@@ -171,6 +174,27 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         # Print status every 100 iterations.
         #if i % 100 == 0:
             # Calculate the accuracy on the training-set.
+            
+            
+        #save line to csv 
+#        if i==1:
+#            line_to_save=np.append(x_batch,chosen_prec)
+#            row_to_save=line_to_save
+#        elif i>1:
+#            line_to_save=np.append(x_batch,chosen_prec)
+#            row_to_save=np.stack(row_to_save,line_to_save,axis=0)
+#        #print(line_to_save.shape)
+##        np.savetxt(f,np.transpose(line_to_save),delimiter=",") 
+#            df=pd.DataFrame(row_to_save)
+#            df.to_csv("mnist.csv")
+            
+        line_to_save=np.append(x_batch,chosen_prec)
+        prec_array[i,:]=line_to_save
+       # print(df.head)
+#        print(prec_array)
+#        print(line_to_save.shape)
+       # df.to_csv("mnist.csv")    
+            
         session.run(optimizer, feed_dict=feed_dict_train)
 
         acc = session.run(accuracy, feed_dict=feed_dict_train)
@@ -181,7 +205,7 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         #if i%100==0:
 
 
-
+        print("Iteration is: {}".format(i))
         print("Chosen precision is: {}".format(chosen_prec))
         print("The contents of the list are ...")
         print(temp_arr)
@@ -205,7 +229,10 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
     time_dif = end_time - start_time
 
     # Print the time-usage.
-    print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))        
+    print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
+    df=pd.DataFrame(prec_array)
+    df.to_csv("cifar10_01.csv")
+        
         
         
 
