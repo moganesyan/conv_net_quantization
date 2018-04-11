@@ -257,6 +257,10 @@ def optimize(config,session, data, optimizer, accuracy):
     count=0
     epochs=1
     print("starting epoch {} ...".format(epochs))
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter('tmp/', session.graph)
+
+
 
     for i in range(0, num_iterations):
 
@@ -316,7 +320,7 @@ def optimize(config,session, data, optimizer, accuracy):
                           }
         session.run(optimizer, feed_dict=feed_dict_train)
 
-        acc = session.run(accuracy, feed_dict=feed_dict_train)
+        summary,acc = session.run([merged,accuracy], feed_dict=feed_dict_train)
         
         total_trn_error=total_trn_error+acc
 
@@ -351,7 +355,8 @@ def optimize(config,session, data, optimizer, accuracy):
             
         elif config.train_batch_size==1:
             if ((i+1)*config.train_batch_size) % 1000 == 0:
-    
+                
+                train_writer.add_summary(summary,(i+1)*config.train_batch_size)
                 # Calculate the accuracy on the training-set.
                 # Message for printing.
                 msg = "Total iteration: {0:>6}, Training Accuracy of last 1000 batch: {1:>6.1%}"
@@ -436,9 +441,9 @@ def print_test_accuracy(config,session,data,y_pred_cls,show_example_errors=False
         if "normal" in str(FLAGS.mode):
             feed_dict = {x: images,
                          y_true: labels,
-                         bitw:config.BITW,
-                         bita:config.BITA,
-                         bitg:config.BITG,
+                         bitw:32,
+                         bita:32,
+                         bitg:32,
                          is_train:False
                          }
         elif "sweep" in str(FLAGS.mode):
@@ -534,9 +539,12 @@ def main(_):
     y_pred_cls,optimizer,accuracy,weights=model.get_model()
 
     #saver = tf.train.Saver()
-    
     #CREATE SESSION
-    session = tf.Session()
+    session = tf.Session()    
+    # Merge all the summaries and write them out to /tmp/mnist_logs (by default)
+#    test_writer = tf.summary.FileWriter(FLAGS.summaries_dir + '/test')
+    
+
     session.run(tf.global_variables_initializer())
     saver = tf.train.Saver()
     

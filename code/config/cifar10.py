@@ -2,9 +2,9 @@ class Config(object):
 	num_trn=50000
 	num_val=5000
 	num_tst=10000
-	BITW=2
-	BITA=2
-	BITG=2
+	BITW=4
+	BITA=4
+	BITG=4
 	filter_size1=5
 	filter_size2=5
 	filter_size3=5
@@ -31,5 +31,5 @@ class Config(object):
 	num_channels=3
 	sum_size=10
 	train_batch_size=1
-	epochs=20
+	epochs=1
 	

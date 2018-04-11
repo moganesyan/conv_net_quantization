@@ -306,21 +306,28 @@ class cifarnetModel(object):
 
     def new_conv_layer(self,x_in,name,
                        num_input_channels,filter_size,
-                       num_filters,bitw):
+                       num_filters,bitw,strides):
+        
         shape=[filter_size,filter_size,num_input_channels,num_filters]
         
         if "conv1" in name:
             with tf.variable_scope(name,reuse=tf.AUTO_REUSE):
                 weights=tf.get_variable(name="w",shape=shape,initializer=tf.glorot_normal_initializer())
+                utils.variable_summaries(weights)
                 
         else:
             with tf.variable_scope(name,reuse=tf.AUTO_REUSE),utils.replace_variable(lambda x: self.fw(x)):
                 weights=tf.get_variable(name="w",shape=shape,initializer=tf.glorot_normal_initializer())
+                utils.variable_summaries(weights)
                 
-                
+         
+        with tf.variable_scope(name,reuse=tf.AUTO_REUSE):
+            shape=[num_filters]
+            bias=tf.get_variable(name="b",initializer=tf.constant_initializer(0.0),shape=shape)
+            
         layer=tf.nn.conv2d(input=x_in,filter=weights,
-                           padding="SAME",strides=[1, 2, 2, 1])
-        
+                           padding="SAME",strides=strides)
+        #layer=tf.nn.bias_add(layer,bias)
         return layer,weights
     
     
@@ -332,13 +339,20 @@ class cifarnetModel(object):
             with tf.variable_scope(name,reuse=tf.AUTO_REUSE),utils.replace_variable(lambda x:self.fw(x)):
                 shape=[num_inputs,num_outputs]
                 weights=tf.get_variable(name="w",shape=shape,initializer=tf.glorot_normal_initializer())
+                utils.variable_summaries(weights)
+
         else:
             with tf.variable_scope(name,reuse=tf.AUTO_REUSE):
                 shape=[num_inputs,num_outputs]
                 weights=tf.get_variable(name="w",shape=shape,initializer=tf.glorot_normal_initializer())
+                utils.variable_summaries(weights)
+        
+        with tf.variable_scope(name,reuse=tf.AUTO_REUSE):
+            shape=[num_outputs]
+            bias=tf.get_variable(name="b",initializer=tf.constant_initializer(0.0),shape=shape)
                 
         layer=tf.matmul(x_in,weights)
-        
+        #layer=tf.nn.bias_add(layer,bias)
         return layer,weights
     
     
@@ -381,7 +395,7 @@ class cifarnetModel(object):
                                        num_input_channels=self.num_channels,
                                        filter_size=self.filter_size1,
                                        num_filters=self.num_filters1,
-                                       bitw=self.BITW)
+                                       bitw=self.BITW,strides=[1,1,1,1])
         #layer_conv1=tf.nn.dropout(layer_conv1,keep_prob=0.1,name="conv1_drop")
                        
         layer_conv1 = tf.nn.max_pool(value=layer_conv1,
@@ -391,8 +405,12 @@ class cifarnetModel(object):
                         
                                
         #layer_conv1=tf.nn.relu(layer_conv1,name="conv1_act")
+
         layer_conv1=self.cabs(layer_conv1)
+        tf.summary.histogram('pre_activations_c1', layer_conv1)
+
         layer_conv1=self.fa(layer_conv1)
+        tf.summary.histogram('post_activations_c1', layer_conv1)
         
         
         ##
@@ -403,7 +421,7 @@ class cifarnetModel(object):
                                        num_input_channels=self.num_filters1,
                                        filter_size=self.filter_size2,
                                        num_filters=self.num_filters2,
-                                       bitw=self.BITW)
+                                       bitw=self.BITW,strides=[1,2,2,1])
         layer_conv2=self.fg(layer_conv2)
                         
         layer_conv2 = tf.nn.max_pool(value=layer_conv2,
@@ -422,8 +440,11 @@ class cifarnetModel(object):
         #layer_conv2=tf.nn.relu(layer_conv2,name="conv2_act")    
         
         layer_conv2=self.cabs(layer_conv2)
+        tf.summary.histogram('pre_activations_c2', layer_conv2)
 
         layer_conv2=self.fa(layer_conv2)
+        tf.summary.histogram('post_activations_c2', layer_conv2)
+        
         #layer_conv2 = tf.layers.dropout(inputs=layer_conv2, rate=0.1,
          #                             training=self._is_train == tf.estimator.ModeKeys.TRAIN)
         
@@ -436,7 +457,8 @@ class cifarnetModel(object):
                                        num_input_channels=self.num_filters2,
                                        filter_size=self.filter_size3,
                                        num_filters=self.num_filters3,
-                                       bitw=self.BITW)
+                                       bitw=self.BITW,
+                                       strides=[1,2,2,1])
 
         #layer_conv3=tf.nn.dropout(layer_conv3,keep_prob=0.01,name="conv3_drop")
                         
@@ -449,8 +471,10 @@ class cifarnetModel(object):
         
         #layer_conv3=tf.nn.relu(layer_conv3,name="conv3_act")
         layer_conv3=self.cabs(layer_conv3)
+        tf.summary.histogram('pre_activations_c3', layer_conv3)
 
         layer_conv3=self.fa(layer_conv3)
+        tf.summary.histogram('post_activations_c3', layer_conv3)
         
         #layer_conv3 = tf.layers.dropout(inputs=layer_conv3, rate=0.1,
           #                            training=self._is_train == tf.estimator.ModeKeys.TRAIN)
@@ -464,7 +488,8 @@ class cifarnetModel(object):
                                        num_input_channels=self.num_filters3,
                                        filter_size=self.filter_size4,
                                        num_filters=self.num_filters4,
-                                       bitw=self.BITW)
+                                       bitw=self.BITW,
+                                       strides=[1,2,2,1])
         #layer_conv4=tf.nn.dropout(layer_conv4,keep_prob=0.01,name="conv4_drop")
                         
         #layer_conv4=tf.nn.dropout(layer_conv4,keep_prob=0.5)
@@ -480,8 +505,10 @@ class cifarnetModel(object):
         
         #layer_conv4=tf.nn.relu(layer_conv4,name="conv4_act")    
         layer_conv4=self.cabs(layer_conv4)
+        tf.summary.histogram('pre_activations_c4', layer_conv4)
 
         layer_conv4=self.fa(layer_conv4)
+        tf.summary.histogram('post_activations_c4', layer_conv4)
         
        # layer_conv4 = tf.layers.dropout(inputs=layer_conv4, rate=0.1,
                                   #    training=self._is_train == tf.estimator.ModeKeys.TRAIN)
@@ -630,13 +657,18 @@ class cifarnetModel(object):
         cross_entropy = tf.nn.softmax_cross_entropy_with_logits(logits=layer_fc0,
                                                                 labels=y_true)
         cost = tf.reduce_mean(cross_entropy)
+        
+        tf.summary.scalar('cost', cost)
+
+        
+        
         optimizer = tf.train.AdamOptimizer(learning_rate=1e-4).minimize(cost)
         correct_prediction = tf.equal(y_pred_cls, y_true_cls)
         accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
                 
         
         
-        return y_pred_cls,optimizer,accuracy,[-1]
+        return y_pred_cls,optimizer,accuracy,[weights_conv1,weights_conv2,weights_conv3,weights_conv4]
          
         
         
