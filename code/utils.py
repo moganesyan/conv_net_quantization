@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# File: dorefa.py
-# Author: Yuxin Wu <ppwwyyxxc@gmail.com>
+
 
 import tensorflow as tf
 from tensorpack.utils.argtools import graph_memoized
@@ -68,25 +67,47 @@ def get_dorefa(bitW, bitA, bitG):
         with G.gradient_override_map({"Round": "Identity"}):
             return tf.round(x * n) / n
 
-    def fw(x):       
-        def func1(x):
-            with G.gradient_override_map({"Sign": "Identity"}):
-                E = tf.stop_gradient(tf.reduce_mean(tf.abs(x)))
-                return tf.sign(x / E) * E
-        def func2(x):
-            x = tf.tanh(x)
-            x = x / tf.reduce_max(tf.abs(x)) * 0.5 + 0.5
-            return 2 * quantize(x, bitW) - 1             
+    def fw(x):
         
-        x_f=tf.cond(bitW>tf.constant(1,dtype=tf.float32),lambda:func2(x),lambda:func1(x))
+        def quant(x):
+            def func1(x):
+                with G.gradient_override_map({"Sign": "Identity"}):
+                    E = tf.stop_gradient(tf.reduce_mean(tf.abs(x)))
+                    #E=tf.Print(E,[E,x],message="Value of E for 1 bit w is: ",summarize=10)
+                    return tf.sign(x / E) * E
+            def func2(x):
+                #x=tf.Print(x,[x],message="Value of w for >1 bit w",summarize=10)
+                x = tf.tanh(x)
+                x = x / tf.reduce_max(tf.abs(x)) * 0.5 + 0.5
+                x_tf=2*quantize(x,bitW)-1
+                #x_tf=tf.Print(x_tf,[x_tf],message="Value of quantized w for >1 bitw w",summarize=10)
+                return x_tf           
+            
+            x_f=tf.cond(tf.greater(bitW,tf.constant(1,dtype=tf.float32)),lambda:func2(x),lambda:func1(x))
+            return x_f
+        
+        def unquant(x):
+            return tf.identity(x)
+              
+        x_f=tf.cond(tf.equal(bitW,tf.constant(32,dtype=tf.float32)),lambda:unquant(x),lambda:quant(x))
+        
         return x_f
   
 
     def fa(x):
-        return quantize(x, bitA)
+        
+        def quant(x):
+            return quantize(x, bitA)
+        def unquant(x):
+            return tf.identity(x)
+        
+        x_f=tf.cond(tf.equal(bitA,tf.constant(32,dtype=tf.float32)),lambda:unquant(x),lambda:quant(x))
+        return x_f
 
     @tf.RegisterGradient("FGGrad")
     def grad_fg(op, x):
+        #print(x.get_shape())
+        #x=tf.Print(x,[x],message='raw grad bp',summarize=50)
         rank = x.get_shape().ndims
         assert rank is not None
         maxx = tf.reduce_max(tf.abs(x), list(range(1, rank)), keep_dims=True)
@@ -96,11 +117,32 @@ def get_dorefa(bitW, bitA, bitG):
             tf.shape(x), minval=-0.5 / n, maxval=0.5 / n)
         x = tf.clip_by_value(x, 0.0, 1.0)
         x = quantize(x, bitG) - 0.5
-        return x * maxx * 2
+        x_tf=x*maxx*2
+        #x_tf=tf.Print(x_tf,[x_tf],message="quantised grad bp",summarize=50)
+        x_tf=tf.where(tf.is_nan(x_tf), tf.zeros_like(x_tf), x_tf)
+        #x_tf=tf.is_nan(x_tf)
+        #x_tf=tf.Print(x_tf,[x_tf],message="Nan is in ",summarize=20)
+        #print(tf.is_nan(x_tf).eval())
+        return x_tf
+#    @tf.RegisterGradient("FGGrad")   
+#    def grad_fg(op, x):
+#        #print(x.get_shape())
+#        x=tf.Print(x,[x],message='raw grad bp',summarize=20)
+#        x_tf=tf.identity(x)
+#        return x_tf
+
 
     def fg(x):
-        with G.gradient_override_map({"Identity": "FGGrad"}):
+        #x=tf.Print(x,[x],message="raw grad fp",summarize=10)
+        def quant(x):
+            with G.gradient_override_map({"Identity": "FGGrad"}):
+                return tf.identity(x)
+        def unquant(x):
             return tf.identity(x)
+        
+        x_f=tf.cond(tf.equal(bitG,tf.constant(32,dtype=tf.float32)),lambda:unquant(x),lambda:quant(x))
+        return x_f        
+        
             
     return fw, fa, fg
 
@@ -244,3 +286,16 @@ def variable_summaries(var):
     tf.summary.scalar('max', tf.reduce_max(var))
     tf.summary.scalar('min', tf.reduce_min(var))
     tf.summary.histogram('histogram', var)
+    
+    
+    
+def gvdebug(g, v):
+    #g=tf.Print(g,[v.name],message='Gradient Name: ',summarize=10)
+    #g = tf.Print(g,[g],'Gradient Value: ',summarize=50)
+    #v = tf.Print(v,[v],'V: ')
+    g2 = tf.zeros_like(g, dtype=tf.float32)
+    v2 = tf.zeros_like(v, dtype=tf.float32)
+    g2 = g
+    v2 = v
+    #print(g.get_shape())
+    return g,v

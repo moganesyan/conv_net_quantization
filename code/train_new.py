@@ -265,6 +265,221 @@ def optimize(config,session, data, optimizer, accuracy,grads):
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter('tmp/', session.graph)
 
+    data_new_x=[]
+    data_new_y=[]
+
+
+    for i in range(0, num_iterations):
+
+        if config.num_trn-count < config.train_batch_size:
+            batch_size=config.num_trn-count
+            print("Needed remainder batch size is {}".format(batch_size))
+        
+        
+        if int(count)==config.num_trn:
+            epochs+=1
+            print("Moving to epoch {} after training {} images".format(epochs,count))
+            total_iterations=0
+            print("reshuffling data...")
+            
+            data_=tuple((np.concatenate(data_new_x,axis=0),np.concatenate(data_new_y,axis=0)))
+            data_new_x=[]
+            data_new_y=[]
+            
+            
+            
+            data_=reshuffle(data=data_)
+            batch_size=config.train_batch_size
+            count=0
+
+
+        
+        x_batch, y_true_batch = get_batch(data=data_,batch_size=batch_size,num_trn=config.num_trn)
+        count+=batch_size
+#        print(1)
+#        print(x_batch.shape)
+#        print(y_true_batch.shape)
+#        print("iteration is {}".format(i))
+#        print(config.train_batch_size)
+#        print(len(x_batch))
+#        print(len(y_true_batch))
+#        print("Total iterations are {}".format(total_iterations))
+#        print("y true batch")
+#        print(y_true_batch)
+#        print("x batch")
+#        print(x_batch)
+        #print(temp)
+        #print(len(x_batch))
+        x_batch_proc=np.array(x_batch,dtype=np.float32)
+        x_batch_proc=x_batch_proc.reshape(batch_size,config.img_size_flat)
+        
+        x_batch_proc=x_batch_proc/255
+        #y_true_batch=y_true_batch.flatten()
+        #print(y_true_batch)
+
+        #print(y_true_batch)
+        temp=np.zeros((batch_size,config.num_classes))
+        temp[np.arange(batch_size),y_true_batch[:,0]]=1
+        #print(temp)
+#        print(x_batch)
+#
+#        print(y_true_batch)
+#        print(temp)
+
+        y_true_batch_precs=y_true_batch[:,1]
+        y_true_batch_onehot=temp
+
+        #print(y_true_batch_precs[0])
+#        print(y_true_batch)
+        
+        #print(y_true_batch_precs[0])
+        feed_dict_train = {x: x_batch_proc,
+                          y_true: y_true_batch_onehot,
+                          bitw:y_true_batch_precs[0],
+                          bita:y_true_batch_precs[0],
+                          bitg:y_true_batch_precs[0],
+                          is_train:True
+                          }
+        summary,_=session.run([merged,optimizer], feed_dict=feed_dict_train)
+
+        acc= session.run(accuracy, feed_dict=feed_dict_train)
+        #print(acc)
+        #print(y_true_batch_precs)
+        #print(y_true_batch)
+
+        if acc==0 and y_true_batch_precs[0]<32:
+            y_true_batch[:,1][0]=y_true_batch[:,1][0]+1
+        #print(y_true_batch)
+#        print(2)
+#        print(x_batch.shape)
+#        print(y_true_batch.shape)
+
+        data_new_x.append(x_batch)
+        data_new_y.append(y_true_batch)
+        
+#        lol_x=np.concatenate(data_new_x,axis=0)
+#        lol_y=np.concatenate(data_new_y,axis=0)
+        
+#        print(3)
+#        print(lol_x.shape)
+#        print(lol_y.shape)
+        
+        #print(len(data_new))
+        #print(np.array(y_true_batch))
+#        print("checker is"
+#        print(checker)
+        total_trn_error=total_trn_error+acc
+
+#        if i % 200 == 0:
+#            # Calculate the accuracy on the training-set.
+#            # Message for printing.
+#            msg = "Total trn error so far: {0:>6}, Training Accuracy: {1:>6.1%}"
+#
+#            # Print it.
+#            print(msg.format(i + 1, total_trn_error/(i+1)))
+#        count+=1
+        
+        
+#        if ((i+1)*config.train_batch_size) % 1000 == 0:
+#
+#            # Calculate the accuracy on the training-set.
+#            # Message for printing.
+#            msg = "Total iteration: {0:>6}, Training Accuracy of last 1000 batch: {1:>6.1%}"
+#
+#            # Print it.
+#            print(msg.format((i+1)*config.train_batch_size, total_trn_error/1000))
+#            total_trn_error=0
+        
+#        for gv in grads:
+#            print(str(gv[1].name))
+#            
+#            g_temp=np.array(session.run(gv[0],feed_dict=feed_dict_train))
+#            g_thresh=g_temp>10
+#            g_nans=np.isnan(g_temp)
+#            print("max value is {}".format(np.max(g_temp)))
+#            print("Threshold")
+#            print(g_temp[g_thresh==True])
+#            print("is_nan")
+#            print(g_temp[g_nans==True])
+        
+        
+           # print(session.run(gv[0],feed_dict=feed_dict_train))
+            #print(gv[0])
+            #print(str(session.run(gv[0],feed_dict=feed_dict_train)) + " - " + gv[1].name)
+            
+        #train_writer.add_summary(summary,(i+1))
+
+        if config.train_batch_size!=1:    
+            msg = "Total iteration: {0:>6}, Training Accuracy of last batch: {1:>6.1%}"
+    
+            # Print it.
+            #train_writer.add_summary(summary,(i+1))
+
+            print(msg.format(total_iterations, total_trn_error))
+            
+            #print("count is {}".format(count))
+            #print(acc)
+            total_trn_error=0
+            
+        elif config.train_batch_size==1:
+            if ((i+1)*config.train_batch_size) % 1000 == 0:
+                
+                #train_writer.add_summary(summary,(i+1)*config.train_batch_size)
+                # Calculate the accuracy on the training-set.
+                # Message for printing.
+                msg = "Total iteration: {0:>6}, Training Accuracy of last 1000 batch: {1:>6.1%}"
+    
+                # Print it.
+                print(msg.format((i+1)*config.train_batch_size, total_trn_error/1000))
+                total_trn_error=0            
+            
+        #count+=batch_size
+            
+
+
+    # Update the total number of iterations performed.
+    
+
+    # Ending time.
+    end_time = time.time()
+
+    # Difference between start and end-times.
+    time_dif = end_time - start_time
+
+    # Print the time-usage.
+    print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
+    
+    
+
+
+
+
+
+
+def optimize_dynamic(config,session, data, optimizer, accuracy,grads):
+    # Ensure we update the global variable rather than a local copy.
+    global total_iterations
+    global total_trn_error
+    #global BITW,BITA,BITG
+    x=config._input_data
+    y_true=config._output_data
+    bitw=config._bitw
+    bita=config._bita
+    bitg=config._bitg
+    is_train=config._is_train
+    data_=data
+      
+    # Start-time used for printing time-usage below.
+    start_time = time.time()
+    num_iterations=int((config.num_trn/config.train_batch_size)*config.epochs)
+    
+    batch_size=config.train_batch_size
+    count=0
+    epochs=1
+    print("starting epoch {} ...".format(epochs))
+    merged = tf.summary.merge_all()
+    train_writer = tf.summary.FileWriter('tmp/', session.graph)
+
 
 
     for i in range(0, num_iterations):
@@ -367,7 +582,7 @@ def optimize(config,session, data, optimizer, accuracy,grads):
             #print(gv[0])
             #print(str(session.run(gv[0],feed_dict=feed_dict_train)) + " - " + gv[1].name)
             
-        #train_writer.add_summary(summary,(i+1))
+        train_writer.add_summary(summary,(i+1))
 
         if config.train_batch_size!=1:    
             msg = "Total iteration: {0:>6}, Training Accuracy of last batch: {1:>6.1%}"
@@ -409,7 +624,10 @@ def optimize(config,session, data, optimizer, accuracy,grads):
     # Print the time-usage.
     print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
     
-    
+
+
+
+
 
 def print_test_accuracy(config,session,data,y_pred_cls,show_example_errors=False,
                         show_confusion_matrix=False):
@@ -554,6 +772,14 @@ def main(_):
     
     data_trn=data[0]
     data_tst=data[1]
+    
+    
+    tmp_y=data_trn[1]
+    tmp_x=data_trn[0]
+    tmp_y_aug=2*np.ones_like(tmp_y)
+    new_y=np.concatenate([tmp_y,tmp_y_aug],axis=1)
+    
+    data_trn=tuple((tmp_x,new_y))
     #print(str(FLAGS.config))
     
     #config=get_config()
