@@ -470,6 +470,7 @@ def optimize_plot(config,session, data, optimizer, accuracy,grads,data_tst,y_pre
         x_batch, y_true_batch = get_batch(data=data_,batch_size=batch_size,num_trn=config.num_trn)
         count+=batch_size
 
+        print(x_batch.shape)
         
         temp=np.zeros((batch_size,config.num_classes))
         temp[np.arange(batch_size),y_true_batch[:,0]]=1
