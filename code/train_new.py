@@ -28,7 +28,7 @@ FLAGS = flags.FLAGS
 
 
 
-test_batch_size = 256
+test_batch_size = 1
 total_iterations = 0
 total_trn_error=0
 
@@ -283,6 +283,9 @@ def optimize(config,session, data, optimizer, accuracy,grads):
             print("reshuffling data...")
             
             data_=tuple((np.concatenate(data_new_x,axis=0),np.concatenate(data_new_y,axis=0)))
+            
+            df_tmp=pd.DataFrame(np.concatenate(data_new_y,axis=0))
+            df_tmp.to_csv("precs_{}.csv".format(epochs))
             data_new_x=[]
             data_new_y=[]
             
@@ -347,8 +350,8 @@ def optimize(config,session, data, optimizer, accuracy,grads):
         #print(y_true_batch_precs)
         #print(y_true_batch)
 
-        if acc==0 and y_true_batch_precs[0]<32:
-            y_true_batch[:,1][0]=y_true_batch[:,1][0]+1
+        if acc==1:
+            y_true_batch[:,1][0]=3
         #print(y_true_batch)
 #        print(2)
 #        print(x_batch.shape)
@@ -423,7 +426,8 @@ def optimize(config,session, data, optimizer, accuracy,grads):
             
         elif config.train_batch_size==1:
             if ((i+1)*config.train_batch_size) % 1000 == 0:
-                
+                train_writer.add_summary(summary,(i+1))
+
                 #train_writer.add_summary(summary,(i+1)*config.train_batch_size)
                 # Calculate the accuracy on the training-set.
                 # Message for printing.
@@ -450,9 +454,6 @@ def optimize(config,session, data, optimizer, accuracy,grads):
     print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
     
     
-
-
-
 
 
 
@@ -722,6 +723,7 @@ def print_test_accuracy(config,session,data,y_pred_cls,show_example_errors=False
     # Classification accuracy is the number of correctly classified
     # images divided by the total number of images in the test-set.
     acc = float(correct_sum) / num_test
+    #print(acc)
 
     # Print the accuracy.
     msg = "Accuracy on Test-Set: {0:.1%} ({1} / {2})"
@@ -758,28 +760,41 @@ def main(_):
     #data=tf.keras.datasets.mnist.load_data()
     if "cifar10" in str(FLAGS.config):
         data=tf.keras.datasets.cifar10.load_data()
-
+        data_trn=data[0]
+        data_tst=data[1]
+        
+        
+        tmp_y=data_trn[1]
+        tmp_x=data_trn[0]
+        tmp_y_aug=32*np.ones_like(tmp_y)
+        new_y=np.concatenate([tmp_y,tmp_y_aug],axis=1)
+        
+        data_trn=tuple((tmp_x,new_y))
         config=get_config()
         model=models.cifarnetModel(is_training=True,config=config)
 
 
     elif "mnist" in str(FLAGS.config):
         data=tf.keras.datasets.mnist.load_data()
+        data_trn=data[0]
+        data_tst=data[1]
+        
+        
+        tmp_y=data_trn[1].reshape(60000,1)
+        tmp_x=data_trn[0]
+        tmp_y_aug=32*np.ones_like(tmp_y)
+        #print(tmp_y.shape)
+        #print(tmp_y_aug.shape)
+        new_y=np.concatenate([tmp_y,tmp_y_aug],axis=1)
+        #print(new_y.shape)
+        
+        data_trn=tuple((tmp_x,new_y))
         config=get_config()
         model=models.lenetModel(is_training=True,config=config)
     else:
         raise ValueError("Unspecified dataset")
     
-    data_trn=data[0]
-    data_tst=data[1]
-    
-    
-    tmp_y=data_trn[1]
-    tmp_x=data_trn[0]
-    tmp_y_aug=2*np.ones_like(tmp_y)
-    new_y=np.concatenate([tmp_y,tmp_y_aug],axis=1)
-    
-    data_trn=tuple((tmp_x,new_y))
+
     #print(str(FLAGS.config))
     
     #config=get_config()

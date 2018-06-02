@@ -18,6 +18,51 @@ from datetime import timedelta
 import math
 
 
+
+
+import os
+import re
+import sys
+import tarfile
+
+from six.moves import urllib
+
+import cifar10_input
+
+FLAGS = tf.app.flags.FLAGS
+
+# Basic model parameters.
+tf.app.flags.DEFINE_integer('batch_size', 128,
+                            """Number of images to process in a batch.""")
+tf.app.flags.DEFINE_string('data_dir', 'tmp/cifar10_data',
+                           """Path to the CIFAR-10 data directory.""")
+tf.app.flags.DEFINE_boolean('use_fp16', False,
+                            """Train the model using fp16.""")
+
+# Global constants describing the CIFAR-10 data set.
+IMAGE_SIZE = cifar10_input.IMAGE_SIZE
+NUM_CLASSES = cifar10_input.NUM_CLASSES
+NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN = cifar10_input.NUM_EXAMPLES_PER_EPOCH_FOR_TRAIN
+NUM_EXAMPLES_PER_EPOCH_FOR_EVAL = cifar10_input.NUM_EXAMPLES_PER_EPOCH_FOR_EVAL
+
+
+# Constants describing the training process.
+MOVING_AVERAGE_DECAY = 0.9999     # The decay to use for the moving average.
+NUM_EPOCHS_PER_DECAY = 350.0      # Epochs after which learning rate decays.
+LEARNING_RATE_DECAY_FACTOR = 0.1  # Learning rate decay factor.
+INITIAL_LEARNING_RATE = 0.1       # Initial learning rate.
+
+# If a model is trained with multiple GPUs, prefix all Op names with tower_name
+# to differentiate the operations. Note that this prefix is removed from the
+# names of the summaries when visualizing a model.
+TOWER_NAME = 'tower'
+
+DATA_URL = 'https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz'
+
+
+
+
+
 _origin_get_variable = tf.get_variable
 _object_stack = []
 
@@ -87,9 +132,13 @@ def get_dorefa(bitW, bitA, bitG):
             return x_f
         
         def unquant(x):
+            #x=tf.Print(x,[x],message="weights are : ",summarize=50)
             return tf.identity(x)
               
         x_f=tf.cond(tf.equal(bitW,tf.constant(32,dtype=tf.float32)),lambda:unquant(x),lambda:quant(x))
+        
+        
+        
         
         return x_f
   
@@ -222,6 +271,9 @@ def plot_confusion_matrix(data_true,cls_pred,num_classes):
     plt.yticks(tick_marks, range(num_classes))
     plt.xlabel('Predicted')
     plt.ylabel('True')
+    
+    for (i, j), z in np.ndenumerate(cm):
+        plt.text(j, i, '{:0.1f}'.format(z), ha='center', va='center')
 
     # Ensure the plot is shown correctly with multiple plots
     # in a single Notebook cell.
@@ -229,8 +281,18 @@ def plot_confusion_matrix(data_true,cls_pred,num_classes):
 
 def plot_conv_weights(session, config, weights, input_channel=0):
     bitw=config._bitw
+    bita=config._bita
+    bitg=config._bitg
+
     BITW=config.BITW
-    w = session.run(weights, feed_dict={bitw:32})
+    BITA=config.BITA
+    BITG=config.BITG
+    
+    BITA=32
+    BITW=32
+    BITG=32
+
+    w = session.run(weights, feed_dict={bitw:BITW,bita:BITA,bitg:BITG})
 
     # Get the lowest and highest values for the weights.
     # This is used to correct the colour intensity across
@@ -293,9 +355,171 @@ def gvdebug(g, v):
     #g=tf.Print(g,[v.name],message='Gradient Name: ',summarize=10)
     #g = tf.Print(g,[g],'Gradient Value: ',summarize=50)
     #v = tf.Print(v,[v],'V: ')
-    g2 = tf.zeros_like(g, dtype=tf.float32)
-    v2 = tf.zeros_like(v, dtype=tf.float32)
-    g2 = g
-    v2 = v
+#    g2 = tf.zeros_like(g, dtype=tf.float32)
+#    v2 = tf.zeros_like(v, dtype=tf.float32)
+#    g2 = g
+#    v2 = v
     #print(g.get_shape())
     return g,v
+
+
+
+
+def _add_loss_summaries(total_loss):
+  """Add summaries for losses in CIFAR-10 model.
+
+  Generates moving average for all losses and associated summaries for
+  visualizing the performance of the network.
+
+  Args:
+    total_loss: Total loss from loss().
+  Returns:
+    loss_averages_op: op for generating moving averages of losses.
+  """
+  # Compute the moving average of all individual losses and the total loss.
+  loss_averages = tf.train.ExponentialMovingAverage(0.9, name='avg')
+  losses = tf.get_collection('losses')
+  loss_averages_op = loss_averages.apply(losses + [total_loss])
+
+  # Attach a scalar summary to all individual losses and the total loss; do the
+  # same for the averaged version of the losses.
+  for l in losses + [total_loss]:
+    # Name each loss as '(raw)' and name the moving average version of the loss
+    # as the original loss name.
+    tf.summary.scalar(l.op.name + ' (raw)', l)
+    tf.summary.scalar(l.op.name, loss_averages.average(l))
+
+  return loss_averages_op
+
+
+
+def maybe_download_and_extract():
+  """Download and extract the tarball from Alex's website."""
+  dest_directory = FLAGS.data_dir
+  if not os.path.exists(dest_directory):
+    os.makedirs(dest_directory)
+  filename = DATA_URL.split('/')[-1]
+  filepath = os.path.join(dest_directory, filename)
+  if not os.path.exists(filepath):
+    def _progress(count, block_size, total_size):
+      sys.stdout.write('\r>> Downloading %s %.1f%%' % (filename,
+          float(count * block_size) / float(total_size) * 100.0))
+      sys.stdout.flush()
+    filepath, _ = urllib.request.urlretrieve(DATA_URL, filepath, _progress)
+    print()
+    statinfo = os.stat(filepath)
+    print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
+  extracted_dir_path = os.path.join(dest_directory, 'cifar-10-batches-bin')
+  if not os.path.exists(extracted_dir_path):
+    tarfile.open(filepath, 'r:gz').extractall(dest_directory)
+    
+    
+    
+    
+def _activation_summary(x):
+  """Helper to create summaries for activations.
+
+  Creates a summary that provides a histogram of activations.
+  Creates a summary that measures the sparsity of activations.
+
+  Args:
+    x: Tensor
+  Returns:
+    nothing
+  """
+  # Remove 'tower_[0-9]/' from the name in case this is a multi-GPU training
+  # session. This helps the clarity of presentation on tensorboard.
+  tensor_name = re.sub('%s_[0-9]*/' % TOWER_NAME, '', x.op.name)
+  tf.summary.histogram(tensor_name + '/activations', x)
+  tf.summary.scalar(tensor_name + '/sparsity',
+                                       tf.nn.zero_fraction(x))
+
+
+def distorted_inputs():
+  """Construct distorted input for CIFAR training using the Reader ops.
+
+  Returns:
+    images: Images. 4D tensor of [batch_size, IMAGE_SIZE, IMAGE_SIZE, 3] size.
+    labels: Labels. 1D tensor of [batch_size] size.
+
+  Raises:
+    ValueError: If no data_dir
+  """
+  if not FLAGS.data_dir:
+    raise ValueError('Please supply a data_dir')
+  data_dir = os.path.join(FLAGS.data_dir, 'cifar-10-batches-bin')
+  images, labels = cifar10_input.distorted_inputs(data_dir=data_dir,
+                                                  batch_size=FLAGS.batch_size)
+  if FLAGS.use_fp16:
+    images = tf.cast(images, tf.float16)
+    labels = tf.cast(labels, tf.float16)
+  return images, labels
+
+
+def inputs(eval_data):
+  """Construct input for CIFAR evaluation using the Reader ops.
+
+  Args:
+    eval_data: bool, indicating if one should use the train or eval data set.
+
+  Returns:
+    images: Images. 4D tensor of [batch_size, IMAGE_SIZE, IMAGE_SIZE, 3] size.
+    labels: Labels. 1D tensor of [batch_size] size.
+
+  Raises:
+    ValueError: If no data_dir
+  """
+  if not FLAGS.data_dir:
+    raise ValueError('Please supply a data_dir')
+  data_dir = os.path.join(FLAGS.data_dir, 'cifar-10-batches-bin')
+  images, labels = cifar10_input.inputs(eval_data=eval_data,
+                                        data_dir=data_dir,
+                                        batch_size=FLAGS.batch_size)
+  if FLAGS.use_fp16:
+    images = tf.cast(images, tf.float16)
+    labels = tf.cast(labels, tf.float16)
+  return images, labels
+
+
+
+def distort_images(image,HEIGHT,WIDTH,is_train):
+    print(image.shape)
+    image=tf.transpose(image, [0,2, 3, 1])
+    image = tf.cast(image, tf.float32)
+    print(image.shape)
+    
+    #tf.map_fn(lambda img: tf.image.random_flip_left_right(img), images)
+    
+    #distorted_image = tf.random_crop(image, [HEIGHT, WIDTH, 3])
+
+    # Randomly flip the image horizontally.
+    
+    def distort(images):
+        
+        #tf.map_fn(lambda img: tf.image.random_flip_left_right(img), images)
+    
+        distorted_image=tf.map_fn(lambda img: tf.image.random_flip_left_right(img),images)
+    
+        # Because these operations are not commutative, consider randomizing
+        # the order their operation.
+        # NOTE: since per_image_standardization zeros the mean and makes
+        # the stddev unit, this likely has no effect see tensorflow#1458.
+        distorted_image = tf.map_fn(lambda img: tf.image.random_brightness(img,
+                                                     max_delta=63),distorted_image)
+        
+        
+        distorted_image = tf.map_fn(lambda img: tf.image.random_contrast(img,
+                                                   lower=0.2, upper=1.8),distorted_image)
+    
+        return distorted_image
+    
+    def no_distort(image):
+        return image
+    
+    distorted_image=tf.cond(is_train,lambda: distort(image),lambda:no_distort(image))
+    # Subtract off the mean and divide by the variance of the pixels.
+    float_image = tf.map_fn(lambda img: tf.image.per_image_standardization(img),distorted_image)
+    
+    
+    
+    return float_image

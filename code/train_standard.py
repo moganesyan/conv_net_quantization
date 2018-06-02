@@ -471,26 +471,25 @@ def optimize_plot(config,session, data, optimizer, accuracy,grads,data_tst,y_pre
         count+=batch_size
 
         
-        y_true_batch=y_true_batch.flatten()
-        
-        #print(y_true_batch)
         temp=np.zeros((batch_size,config.num_classes))
-        temp[np.arange(batch_size),y_true_batch]=1
+        temp[np.arange(batch_size),y_true_batch[:,0]]=1
 #        print(x_batch)
 #
 #        print(y_true_batch)
 #        print(temp)
 
-        
-        y_true_batch=temp
+        y_true_batch_precs=y_true_batch[:,1]
+        y_true_batch_onehot=temp
 
         feed_dict_train = {x: x_batch,
-                          y_true: y_true_batch,
-                          bitw:config.BITW,
-                          bita:config.BITA,
-                          bitg:config.BITG,
-                          is_train:True
+                           y_true: y_true_batch_onehot,
+                           bitw:config.BITW,
+                           bita:config.BITA,
+                           bitg:config.BITG,
+                           is_train:True
                           }
+        
+        
         summary,_=session.run([merged,optimizer], feed_dict=feed_dict_train)
 
         acc= session.run(accuracy, feed_dict=feed_dict_train)
@@ -838,9 +837,9 @@ def print_test_accuracy(config,session,data,y_pred_cls,show_example_errors=False
         elif "figures" in str(FLAGS.mode):
             feed_dict = {x: images,
                  y_true: labels,
-                 bitw:BITW,
-                 bita:BITA,
-                 bitg:BITG,
+                 bitw:32,
+                 bita:32,
+                 bitg:32,
                  is_train:False
                  } 
             
