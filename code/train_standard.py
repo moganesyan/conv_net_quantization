@@ -57,7 +57,7 @@ def reshuffle(data):
 
 
 
-def optimize_sweep(config,session, data, optimizer, accuracy,saver):
+def optimize_sweep(config,session, data, optimizer, accuracy,grads,data_tst,y_pred_cls,data_trn,saver):
     # Ensure we update the global variable rather than a local copy.
     global total_iterations
     global total_trn_error
@@ -84,6 +84,12 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
     
     #prec_array=np.empty((num_iterations,config.img_size_flat+1))
     prec_array=np.empty((num_iterations,1))
+        
+    trn_err=np.zeros((config.epochs,1))
+    tst_err=np.zeros((config.epochs,1))
+    
+    
+    
     for i in range(0, num_iterations):
 
         if config.num_trn-count < 1:
@@ -92,6 +98,14 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         
         
         if int(count)==config.num_trn:
+                        
+            trn_err[epochs]=print_test_accuracy(config=config,session=session,data=data_trn,y_pred_cls=y_pred_cls,
+                   show_confusion_matrix=False,show_example_errors=False)
+
+            tst_err[epochs]=print_test_accuracy(config=config,session=session,data=data_tst,y_pred_cls=y_pred_cls,
+                   show_confusion_matrix=False,show_example_errors=False)
+            
+            
             epochs+=1
             print("Moving to epoch {} after training {} images".format(epochs,count))
             total_iterations=0
@@ -104,34 +118,31 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         
         x_batch, y_true_batch = get_batch(data=data_,batch_size=batch_size,num_trn=config.num_trn)
         count+=batch_size
-        x_batch=np.array(x_batch,dtype=np.float32)
-        x_batch=x_batch.reshape(batch_size,config.img_size_flat)
         
-        x_batch=x_batch/255
         
-        y_true_batch=y_true_batch.flatten()
         
-        #print(y_true_batch)
         temp=np.zeros((batch_size,config.num_classes))
-        temp[np.arange(batch_size),y_true_batch]=1
+        temp[np.arange(batch_size),y_true_batch[:,0]]=1
 #        print(x_batch)
 #
 #        print(y_true_batch)
 #        print(temp)
 
+        y_true_batch_precs=y_true_batch[:,1]
+        y_true_batch_onehot=temp
         
-        y_true_batch=temp
         
+       
         temp_arr=[]
         chosen_prec=32
         
-        for prec in range(3,33):
+        for prec in range(2,33):
             saver.restore(session, "tmp/model.ckpt")
             #print("Model restored.")
             #print("testing precision: {}".format(prec))
         
             feed_dict_train = {x: x_batch,
-                               y_true: y_true_batch,
+                               y_true: y_true_batch_onehot,
                                bitw:prec,
                                bita:prec,
                                bitg:prec,
@@ -166,7 +177,7 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         saver.restore(session, "tmp/model.ckpt")
         #fw,fa,fg=get_dorefa(chosen_prec,chosen_prec,chosen_prec)
         feed_dict_train = {x: x_batch,
-                   y_true: y_true_batch,
+                   y_true: y_true_batch_onehot,
                    bitw:chosen_prec,
                    bita:chosen_prec,
                    bitg:chosen_prec,
@@ -208,10 +219,10 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
         #if i%100==0:
 
 
-        print("Iteration is: {}".format(i))
-        print("Chosen precision is: {}".format(chosen_prec))
-        print("The contents of the list are ...")
-        print(temp_arr)
+#        print("Iteration is: {}".format(i))
+#        print("Chosen precision is: {}".format(chosen_prec))
+#        print("The contents of the list are ...")
+#        print(temp_arr)
         
         if ((i+1)*1) % 1000 == 0:
 
@@ -236,7 +247,12 @@ def optimize_sweep(config,session, data, optimizer, accuracy,saver):
     # Print the time-usage.
     print("Time usage: " + str(timedelta(seconds=int(round(time_dif)))))
     df=pd.DataFrame(prec_array)
-    df.to_csv("cifar10_dud_3_1e_2.csv")
+    df.to_csv("cifar10_sweep_2inf.csv")
+    
+    row=np.concatenate((trn_err,tst_err),axis=1)
+    
+    row_df=pd.DataFrame(row)
+    row_df.to_csv("trn_tst_errors_sweep_2bit.csv")
         
         
         
@@ -971,7 +987,7 @@ def main(_):
         
     elif "sweep" in str(FLAGS.mode):    
         optimize_sweep(config=model,session=session,data=data_trn,optimizer=optimizer,
-                 accuracy=accuracy,saver=saver)
+                  accuracy=accuracy,grads=gvs,data_tst=data_tst,y_pred_cls=y_pred_cls,data_trn=data_trn,saver=saver)
         
         
         
